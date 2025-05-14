@@ -34,14 +34,6 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 
 	private firstPerson: boolean = false;
 
-	public get position(): THREE.Vector3 {
-		return new THREE.Vector3(
-			this.collision.position.x,
-			this.collision.position.y,
-			this.collision.position.z
-		);
-	}
-
 	constructor(gltf: any, handlingSetup?: any)
 	{
 		super();
@@ -65,6 +57,7 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 		this.modelContainer = new THREE.Group();
 		this.add(this.modelContainer);
 		this.modelContainer.add(gltf.scene);
+		// this.setModel(gltf.scene);
 
 		// Raycast vehicle component
 		this.rayCastVehicle = new CANNON.RaycastVehicle({
@@ -264,6 +257,12 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 	{
 		if (this.firstPerson)
 		{
+			// this.world.cameraOperator.target.set(
+			//     this.position.x + this.camera.position.x,
+			//     this.position.y + this.camera.position.y,
+			//     this.position.z + this.camera.position.z
+			// );
+
 			let temp = new THREE.Vector3().copy(this.camera.position);
 			temp.applyQuaternion(this.quaternion);
 			this.world.cameraOperator.target.copy(temp.add(this.position));
@@ -331,6 +330,7 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 			this.world = world;
 			world.vehicles.push(this);
 			world.graphicsWorld.add(this);
+			// world.physicsWorld.addBody(this.collision);
 			this.rayCastVehicle.addToWorld(world.physicsWorld);
 
 			this.wheels.forEach((wheel) =>
@@ -356,6 +356,7 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 			this.world = undefined;
 			_.pull(world.vehicles, this);
 			world.graphicsWorld.remove(this);
+			// world.physicsWorld.remove(this.collision);
 			this.rayCastVehicle.removeFromWorld(world.physicsWorld);
 
 			this.wheels.forEach((wheel) =>
@@ -464,5 +465,3 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 		}
 	}
 }
-
-export { Vehicle }

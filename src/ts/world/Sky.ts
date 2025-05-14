@@ -54,7 +54,7 @@ export class Sky extends THREE.Object3D implements IUpdatable
 			new THREE.SphereBufferGeometry(1000, 24, 12),
 			this.skyMaterial
 		);
-		this.add(this.skyMesh);
+		this.attach(this.skyMesh);
 
 		// Ambient light
 		this.hemiLight = new THREE.HemisphereLight( 0xffffff, 0xffffff, 1.0 );
@@ -65,7 +65,17 @@ export class Sky extends THREE.Object3D implements IUpdatable
 		this.world.graphicsWorld.add( this.hemiLight );
 
 		// CSM
-		let splitsCallback = (amount: number, near: number, far: number) =>
+		// New version
+		// let splitsCallback = (amount, near, far, target) =>
+		// {
+		// 	for (let i = amount - 1; i >= 0; i--)
+		// 	{
+		// 		target.push(Math.pow(1 / 3, i));
+		// 	}
+		// };
+
+		// Legacy
+		let splitsCallback = (amount, near, far) =>
 		{
 			let arr = [];
 
@@ -79,7 +89,7 @@ export class Sky extends THREE.Object3D implements IUpdatable
 
 		this.csm = new CSM({
 			fov: 80,
-			far: 250,
+			far: 250,	// maxFar
 			lightIntensity: 2.5,
 			cascades: 3,
 			shadowMapSize: 2048,
