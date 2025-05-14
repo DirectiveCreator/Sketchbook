@@ -464,3 +464,5 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 		}
 	}
 }
+
+export { Vehicle }
