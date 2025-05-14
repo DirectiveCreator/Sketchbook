@@ -1,5 +1,8 @@
+import * as THREE from 'three';
+import * as Utils from '../../core/FunctionLibrary';
+
 // Update the readCharacterData method in the Character class
-public readCharacterData(gltf: any): void {
+public readCharacterData(gltf: THREE.Object3D): void {
     // Check if this is an MML character
     const isMMLCharacter = gltf.scene.userData?.isMMLCharacter;
 
