@@ -63,6 +63,8 @@ export class World
 	public paths: Path[] = [];
 	public scenarioGUIFolder: any;
 	public updatables: IUpdatable[] = [];
+	/* Default MML avatar URL that will be used when spawning characters. */
+	public defaultMMLUrl: string = '';
 
 	private lastScenarioID: string;
 
@@ -537,6 +539,9 @@ export class World
 			Debug_FPS: false,
 			Sun_Elevation: 50,
 			Sun_Rotation: 145,
+			/* URL pointing to an .mml / .html / .glb avatar that should be used
+			 * for every newly–spawned character unless explicitly overridden. */
+			Default_MML_URL: ''
 		};
 
 		const gui = new GUI.GUI();
@@ -615,6 +620,21 @@ export class World
 			{
 				UIManager.setFPSVisible(enabled);
 			});
+
+		/* MML Avatar URL */
+		settingsFolder
+			.add(this.params, 'Default_MML_URL')
+			.name('Default MML URL')
+			.onFinishChange((value: string) =>
+			{
+				/* Persist the URL so other systems (e.g. CharacterSpawnPoint)
+				 * can read it from the world instance. */
+				scope.defaultMMLUrl = value;
+			});
+
+		/* Initialise the property with default value so it is always in sync
+		 * even if the user never opens the GUI panel. */
+		this.defaultMMLUrl = this.params.Default_MML_URL;
 
 		gui.open();
 	}

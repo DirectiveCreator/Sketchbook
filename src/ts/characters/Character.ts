@@ -27,6 +27,7 @@ import { GroundImpactData } from './GroundImpactData';
 import { ClosestObjectFinder } from '../core/ClosestObjectFinder';
 import { Object3D } from 'three';
 import { EntityType } from '../enums/EntityType';
+import { MMLAvatarLoader } from '../utils/MMLAvatarLoader';
 
 export class Character extends THREE.Object3D implements IWorldEntity
 {
@@ -39,6 +40,8 @@ export class Character extends THREE.Object3D implements IWorldEntity
 	public materials: THREE.Material[] = [];
 	public mixer: THREE.AnimationMixer;
 	public animations: any[];
+	public mmlUrl?: string;
+	private mmlLoader: MMLAvatarLoader;
 
 	// Movement
 	public acceleration: THREE.Vector3 = new THREE.Vector3();
@@ -82,9 +85,12 @@ export class Character extends THREE.Object3D implements IWorldEntity
 	
 	private physicsEnabled: boolean = true;
 
-	constructor(gltf: any)
+	constructor(gltf: any, mmlUrl?: string)
 	{
 		super();
+
+		this.mmlUrl = mmlUrl;
+		this.mmlLoader = new MMLAvatarLoader();
 
 		this.readCharacterData(gltf);
 		this.setAnimations(gltf.animations);
@@ -160,6 +166,54 @@ export class Character extends THREE.Object3D implements IWorldEntity
 
 		// States
 		this.setState(new Idle(this));
+
+		// Load MML avatar if provided
+		if (this.mmlUrl) {
+			this.loadMMLAvatar();
+		}
+	}
+
+	/**
+	 * Load MML avatar and replace the current model
+	 */
+	private async loadMMLAvatar(): Promise<void> {
+		try {
+			console.log(`Loading MML avatar from ${this.mmlUrl}`);
+			const avatarScene = await this.mmlLoader.loadFromUrl(this.mmlUrl);
+			
+			// Clear existing model
+			while (this.modelContainer.children.length > 0) {
+				this.modelContainer.remove(this.modelContainer.children[0]);
+			}
+			
+			// Add new model
+			this.modelContainer.add(avatarScene);
+			
+			// Update mixer to use the new model
+			this.mixer = new THREE.AnimationMixer(avatarScene);
+			
+			// Process materials for shadows
+			this.materials = [];
+			avatarScene.traverse((child) => {
+				if (child.isMesh) {
+					Utils.setupMeshProperties(child);
+					if (child.material !== undefined) {
+						this.materials.push(child.material);
+					}
+				}
+			});
+			
+			// Apply shadow cascades if world is set
+			if (this.world?.sky?.csm) {
+				this.materials.forEach((mat) => {
+					this.world.sky.csm.setupMaterial(mat);
+				});
+			}
+			
+			console.log('MML avatar loaded successfully');
+		} catch (error) {
+			console.error('Failed to load MML avatar:', error);
+		}
 	}
 
 	public setAnimations(animations: []): void

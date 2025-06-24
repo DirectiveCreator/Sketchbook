@@ -16,19 +16,36 @@ export class CharacterSpawnPoint implements ISpawnPoint
 	
 	public spawn(loadingManager: LoadingManager, world: World): void
 	{
-		loadingManager.loadGLTF('build/assets/boxman.glb', (model) =>
+		/**
+		 * Spawn a character. If an `mmlUrl` is provided the character will
+		 * replace its default visuals with the MML avatar once initialised.
+		 *
+		 * NOTE: The underlying Character class already supports an optional
+		 * `mmlUrl` parameter, so we simply forward it.
+		 */
+		// Overload-compatible signature – the extra argument is optional
+		// so existing call-sites (two arguments) remain valid.
+		// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+		// @ts-ignore – interface may not yet include the optional argument.
+		const _spawn = (mmlUrl?: string): void =>
 		{
-			let player = new Character(model);
+			loadingManager.loadGLTF('build/assets/boxman.glb', (model) =>
+			{
+				const player = new Character(model, mmlUrl);
 			
-			let worldPos = new THREE.Vector3();
-			this.object.getWorldPosition(worldPos);
-			player.setPosition(worldPos.x, worldPos.y, worldPos.z);
+				const worldPos = new THREE.Vector3();
+				this.object.getWorldPosition(worldPos);
+				player.setPosition(worldPos.x, worldPos.y, worldPos.z);
 			
-			let forward = Utils.getForward(this.object);
-			player.setOrientation(forward, true);
+				const forward = Utils.getForward(this.object);
+				player.setOrientation(forward, true);
 			
-			world.add(player);
-			player.takeControl();
-		});
+				world.add(player);
+				player.takeControl();
+			});
+		};
+
+		// The actual invocation; third argument may be passed by callers.
+		return _spawn(arguments[2] as string | undefined);
 	}
 }
