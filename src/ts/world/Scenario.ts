@@ -87,6 +87,13 @@ export class Scenario
 					else if (child.userData.type === 'player')
 					{
 						let sp = new CharacterSpawnPoint(child);
+
+						// Optional MML avatar URL baked into the scene
+						if (child.userData.hasOwnProperty('mml_url'))
+						{
+							sp.mmlUrl = child.userData.mml_url;
+						}
+
 						this.spawnPoints.push(sp);
 					}
 				}
@@ -106,7 +113,16 @@ export class Scenario
 	public launch(loadingManager: LoadingManager, world: World): void
 	{
 		this.spawnPoints.forEach((sp) => {
-			sp.spawn(loadingManager, world);
+			// Character spawn points may carry an MML avatar URL; fall back
+			// to the world-wide default when they don't.
+			if (sp instanceof CharacterSpawnPoint)
+			{
+				sp.spawn(loadingManager, world, sp.mmlUrl || world.defaultMMLUrl || undefined);
+			}
+			else
+			{
+				sp.spawn(loadingManager, world);
+			}
 		});
 
 		if (!this.spawnAlways)

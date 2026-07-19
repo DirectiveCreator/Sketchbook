@@ -64,6 +64,10 @@ export class World
 	public scenarioGUIFolder: any;
 	public updatables: IUpdatable[] = [];
 
+	// Default MML avatar URL applied to every newly spawned character
+	// (can be set via the ?mml= query parameter or the settings GUI)
+	public defaultMMLUrl: string = '';
+
 	private lastScenarioID: string;
 
 	constructor(worldScenePath?: any)
@@ -527,6 +531,9 @@ export class World
 
 	private createParamsGUI(scope: World): void
 	{
+		// ?mml=<url> boots the world with an MML avatar pre-configured
+		const queryMMLUrl = new URLSearchParams(window.location.search).get('mml') || '';
+
 		this.params = {
 			Pointer_Lock: true,
 			Mouse_Sensitivity: 0.3,
@@ -537,6 +544,7 @@ export class World
 			Debug_FPS: false,
 			Sun_Elevation: 50,
 			Sun_Rotation: 145,
+			Default_MML_URL: queryMMLUrl
 		};
 
 		const gui = new GUI.GUI();
@@ -615,6 +623,15 @@ export class World
 			{
 				UIManager.setFPSVisible(enabled);
 			});
+
+		// MML avatar URL - applies to characters spawned after the change
+		settingsFolder.add(this.params, 'Default_MML_URL')
+			.name('Default MML URL')
+			.onFinishChange((value: string) =>
+			{
+				scope.defaultMMLUrl = value;
+			});
+		this.defaultMMLUrl = this.params.Default_MML_URL;
 
 		gui.open();
 	}

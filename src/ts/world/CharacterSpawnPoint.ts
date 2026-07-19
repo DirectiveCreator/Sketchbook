@@ -8,17 +8,18 @@ import * as Utils from '../core/FunctionLibrary';
 export class CharacterSpawnPoint implements ISpawnPoint
 {
 	private object: THREE.Object3D;
+	public mmlUrl: string;
 
 	constructor(object: THREE.Object3D)
 	{
 		this.object = object;
 	}
-	
-	public spawn(loadingManager: LoadingManager, world: World): void
+
+	public spawn(loadingManager: LoadingManager, world: World, mmlUrl?: string): void
 	{
 		loadingManager.loadGLTF('build/assets/boxman.glb', (model) =>
 		{
-			let player = new Character(model);
+			let player = new Character(model, mmlUrl);
 			
 			let worldPos = new THREE.Vector3();
 			this.object.getWorldPosition(worldPos);

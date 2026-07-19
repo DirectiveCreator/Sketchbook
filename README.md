@@ -80,6 +80,19 @@ const world = new World('scene.glb');
 
 -->
 
+## MML Avatars
+
+Sketchbook can dress characters in [MML (Metaverse Markup Language)](https://mmleditor.com/) avatars instead of the default boxman model.
+
+Three ways to enable it:
+
+1. **Query parameter** — append `?mml=<url>` to the page URL, e.g.
+   `http://localhost:8080/?mml=https://files.directivecreator.com/grillz/mml/1.mml`
+2. **Settings GUI** — paste a URL into the *Default MML URL* field (applies to characters spawned after the change, e.g. via a scenario relaunch).
+3. **Scene data** — set a `mml_url` property on a `player` spawn object in the world scene.
+
+Accepted URL formats: `.mml` / `.html` documents containing an `<m-character>` element (with `<m-model>` trait children), or a direct `.glb` / `.gltf` model URL. Relative trait URLs inside MML documents are resolved against the document URL. If loading fails the character keeps the default model. Physics, movement and the state machine are unaffected — only the visual model, materials and animation mixer are swapped.
+
 ## Contributing
 
 1. Get the LTS version of [Node.js](https://nodejs.org/en/) 16

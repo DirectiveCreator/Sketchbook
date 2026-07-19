@@ -27,6 +27,7 @@ import { GroundImpactData } from './GroundImpactData';
 import { ClosestObjectFinder } from '../core/ClosestObjectFinder';
 import { Object3D } from 'three';
 import { EntityType } from '../enums/EntityType';
+import { MMLAvatarLoader } from '../utils/MMLAvatarLoader';
 
 export class Character extends THREE.Object3D implements IWorldEntity
 {
@@ -39,6 +40,8 @@ export class Character extends THREE.Object3D implements IWorldEntity
 	public materials: THREE.Material[] = [];
 	public mixer: THREE.AnimationMixer;
 	public animations: any[];
+	public mmlUrl: string;
+	private mmlLoader: MMLAvatarLoader = new MMLAvatarLoader();
 
 	// Movement
 	public acceleration: THREE.Vector3 = new THREE.Vector3();
@@ -82,10 +85,11 @@ export class Character extends THREE.Object3D implements IWorldEntity
 	
 	private physicsEnabled: boolean = true;
 
-	constructor(gltf: any)
+	constructor(gltf: any, mmlUrl?: string)
 	{
 		super();
 
+		this.mmlUrl = mmlUrl;
 		this.readCharacterData(gltf);
 		this.setAnimations(gltf.animations);
 
@@ -160,6 +164,69 @@ export class Character extends THREE.Object3D implements IWorldEntity
 
 		// States
 		this.setState(new Idle(this));
+
+		// Swap the default visuals for an MML avatar once it has loaded.
+		// The boxman model stays in place as a fallback if loading fails.
+		if (this.mmlUrl)
+		{
+			this.loadMMLAvatar();
+		}
+	}
+
+	/**
+	 * Load an MML avatar and replace the default model with it.
+	 * Movement, physics and state logic are untouched - only the visual
+	 * model, materials, mixer and animation clips are swapped.
+	 */
+	private async loadMMLAvatar(): Promise<void>
+	{
+		try
+		{
+			console.log(`Loading MML avatar from ${this.mmlUrl}`);
+			const avatar = await this.mmlLoader.loadFromUrl(this.mmlUrl);
+
+			// Clear existing model
+			while (this.modelContainer.children.length > 0)
+			{
+				this.modelContainer.remove(this.modelContainer.children[0]);
+			}
+			this.modelContainer.add(avatar.scene);
+
+			// Retarget the mixer to the new model and use its clips
+			this.mixer.stopAllAction();
+			this.mixer = new THREE.AnimationMixer(avatar.scene);
+			this.animations = avatar.animations;
+
+			// Rebuild material list for shadows
+			this.materials = [];
+			avatar.scene.traverse((child) =>
+			{
+				if ((child as THREE.Mesh).isMesh)
+				{
+					Utils.setupMeshProperties(child);
+					const mesh = child as THREE.Mesh;
+					if (mesh.material !== undefined)
+					{
+						this.materials.push(mesh.material as THREE.Material);
+					}
+				}
+			});
+
+			// Hook new materials into the CSM shadow pipeline
+			if (this.world !== undefined && this.world.sky !== undefined)
+			{
+				this.materials.forEach((mat) =>
+				{
+					this.world.sky.csm.setupMaterial(mat);
+				});
+			}
+
+			console.log('MML avatar loaded successfully');
+		}
+		catch (error)
+		{
+			console.error(`Failed to load MML avatar from ${this.mmlUrl}, keeping default model:`, error);
+		}
 	}
 
 	public setAnimations(animations: []): void
@@ -502,6 +569,20 @@ export class Character extends THREE.Object3D implements IWorldEntity
 		{
 			// gltf
 			let clip = THREE.AnimationClip.findByName( this.animations, clipName );
+
+			if (clip === null)
+			{
+				// MML avatars ship clips under their own names - fall back
+				// to a case-insensitive substring match (e.g. 'idle').
+				clip = this.animations.find((anim) =>
+					anim.name.toLowerCase().indexOf(clipName.toLowerCase()) !== -1) || null;
+			}
+
+			if (clip === null)
+			{
+				console.warn(`Animation ${clipName} not found!`);
+				return 0;
+			}
 
 			let action = this.mixer.clipAction(clip);
 			if (action === null)

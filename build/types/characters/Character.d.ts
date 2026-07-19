@@ -23,6 +23,8 @@ export declare class Character extends THREE.Object3D implements IWorldEntity {
     materials: THREE.Material[];
     mixer: THREE.AnimationMixer;
     animations: any[];
+    mmlUrl: string;
+    private mmlLoader;
     acceleration: THREE.Vector3;
     velocity: THREE.Vector3;
     arcadeVelocityInfluence: THREE.Vector3;
@@ -58,7 +60,13 @@ export declare class Character extends THREE.Object3D implements IWorldEntity {
     occupyingSeat: VehicleSeat;
     vehicleEntryInstance: VehicleEntryInstance;
     private physicsEnabled;
-    constructor(gltf: any);
+    constructor(gltf: any, mmlUrl?: string);
+    /**
+     * Load an MML avatar and replace the default model with it.
+     * Movement, physics and state logic are untouched - only the visual
+     * model, materials, mixer and animation clips are swapped.
+     */
+    private loadMMLAvatar;
     setAnimations(animations: []): void;
     setArcadeVelocityInfluence(x: number, y?: number, z?: number): void;
     setViewVector(vector: THREE.Vector3): void;
