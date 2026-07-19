@@ -28,6 +28,8 @@ import { ClosestObjectFinder } from '../core/ClosestObjectFinder';
 import { Object3D } from 'three';
 import { EntityType } from '../enums/EntityType';
 import { MMLAvatarLoader } from '../utils/MMLAvatarLoader';
+import { AnimationRetargeter } from '../utils/AnimationRetargeter';
+import { SkeletonUtils } from 'three/examples/jsm/utils/SkeletonUtils';
 
 export class Character extends THREE.Object3D implements IWorldEntity
 {
@@ -41,7 +43,10 @@ export class Character extends THREE.Object3D implements IWorldEntity
 	public mixer: THREE.AnimationMixer;
 	public animations: any[];
 	public mmlUrl: string;
+	private currentClipName: string = 'idle';
 	private mmlLoader: MMLAvatarLoader = new MMLAvatarLoader();
+	private boxmanRestScene: THREE.Object3D;
+	private boxmanClips: THREE.AnimationClip[];
 
 	// Movement
 	public acceleration: THREE.Vector3 = new THREE.Vector3();
@@ -102,6 +107,11 @@ export class Character extends THREE.Object3D implements IWorldEntity
 		this.modelContainer.position.y = -0.57;
 		this.tiltContainer.add(this.modelContainer);
 		this.modelContainer.add(gltf.scene);
+
+		// Pristine snapshot of the default rig, kept for retargeting its
+		// animation clips onto MML avatar skeletons later.
+		this.boxmanRestScene = SkeletonUtils.clone(gltf.scene) as THREE.Object3D;
+		this.boxmanClips = gltf.animations;
 
 		this.mixer = new THREE.AnimationMixer(gltf.scene);
 
@@ -177,6 +187,12 @@ export class Character extends THREE.Object3D implements IWorldEntity
 	 * Load an MML avatar and replace the default model with it.
 	 * Movement, physics and state logic are untouched - only the visual
 	 * model, materials, mixer and animation clips are swapped.
+	 *
+	 * The avatar is scaled to the default character's height and grounded
+	 * at the same foot level. The boxman animation clips are retargeted
+	 * onto the avatar's skeleton so the state machine (idle, run, jump,
+	 * sitting, driving, ...) fully animates the rig even when the MML
+	 * model ships no clips of its own.
 	 */
 	private async loadMMLAvatar(): Promise<void>
 	{
@@ -185,17 +201,59 @@ export class Character extends THREE.Object3D implements IWorldEntity
 			console.log(`Loading MML avatar from ${this.mmlUrl}`);
 			const avatar = await this.mmlLoader.loadFromUrl(this.mmlUrl);
 
+			// Measure the default character so the avatar can match its size.
+			// (Skinned meshes need CPU-skinned vertices - plain bounding
+			// boxes don't reflect the posed/skinned size.)
+			const boxmanHeight = this.measureSkinnedHeight(this.modelContainer);
+
 			// Clear existing model
 			while (this.modelContainer.children.length > 0)
 			{
 				this.modelContainer.remove(this.modelContainer.children[0]);
 			}
+
+			// Scale the avatar to the default character's height and ground
+			// its feet at the same level (model container origin)
+			const mmlBounds = this.measureSkinnedBounds(avatar.scene);
+			const mmlHeight = mmlBounds.max - mmlBounds.min;
+			let heightRatio = 1;
+			if (isFinite(boxmanHeight) && isFinite(mmlHeight) && boxmanHeight > 0 && mmlHeight > 0)
+			{
+				heightRatio = mmlHeight / boxmanHeight;
+				const scale = boxmanHeight / mmlHeight;
+				avatar.scene.scale.setScalar(scale);
+				avatar.scene.position.y = -mmlBounds.min * scale;
+				console.log(`MML avatar scaled to character height (${mmlHeight.toFixed(2)} -> ${boxmanHeight.toFixed(2)})`);
+			}
+
+			// Retarget the boxman clips onto the avatar's skeleton so every
+			// character state animates the rig. Falls back to the avatar's
+			// own clips if its skeleton can't be mapped.
+			const retargeted = AnimationRetargeter.retarget(
+				this.boxmanRestScene,
+				this.boxmanClips,
+				avatar.scene,
+				heightRatio
+			);
+
 			this.modelContainer.add(avatar.scene);
 
 			// Retarget the mixer to the new model and use its clips
 			this.mixer.stopAllAction();
 			this.mixer = new THREE.AnimationMixer(avatar.scene);
-			this.animations = avatar.animations;
+			if (retargeted !== null && retargeted.length > 0)
+			{
+				this.animations = retargeted;
+				console.log(`Retargeted ${retargeted.length} clips onto MML avatar skeleton`);
+			}
+			else
+			{
+				this.animations = avatar.animations;
+			}
+
+			// Restart the clip the state machine last asked for - the old
+			// mixer was discarded along with its running action.
+			this.setAnimation(this.currentClipName, 0.1);
 
 			// Rebuild material list for shadows
 			this.materials = [];
@@ -227,6 +285,78 @@ export class Character extends THREE.Object3D implements IWorldEntity
 		{
 			console.error(`Failed to load MML avatar from ${this.mmlUrl}, keeping default model:`, error);
 		}
+	}
+
+	/**
+	 * Min/max Y of a model in its current pose, computing skinned vertex
+	 * positions on the CPU. Regular bounding boxes ignore skinning and
+	 * report the wrong size for skinned meshes (e.g. double-counting an
+	 * armature scale), so this is the reliable way to measure a rig.
+	 */
+	private measureSkinnedBounds(root: THREE.Object3D): { min: number; max: number }
+	{
+		root.updateWorldMatrix(true, true);
+
+		let min = Infinity;
+		let max = -Infinity;
+		const vertex = new THREE.Vector3();
+		const skinned = new THREE.Vector3();
+		const contrib = new THREE.Vector3();
+		const boneMat = new THREE.Matrix4();
+
+		root.traverse((child) =>
+		{
+			const mesh = child as THREE.Mesh;
+			if ((mesh as any).isSkinnedMesh === true)
+			{
+				const skinnedMesh = mesh as THREE.SkinnedMesh;
+				const geometry = mesh.geometry as THREE.BufferGeometry;
+				const position = geometry.attributes.position as THREE.BufferAttribute;
+				const skinIndex = geometry.attributes.skinIndex;
+				const skinWeight = geometry.attributes.skinWeight;
+				if (position === undefined || skinIndex === undefined || skinWeight === undefined) return;
+
+				skinnedMesh.skeleton.update();
+				const boneMatrices = skinnedMesh.skeleton.boneMatrices;
+				const stride = Math.max(1, Math.floor(position.count / 800));
+
+				for (let i = 0; i < position.count; i += stride)
+				{
+					vertex.fromBufferAttribute(position, i).applyMatrix4(skinnedMesh.bindMatrix);
+					skinned.set(0, 0, 0);
+					for (let k = 0; k < 4; k++)
+					{
+						const weight = [skinWeight.getX(i), skinWeight.getY(i), skinWeight.getZ(i), skinWeight.getW(i)][k];
+						if (weight === 0) continue;
+						const boneIndex = [skinIndex.getX(i), skinIndex.getY(i), skinIndex.getZ(i), skinIndex.getW(i)][k];
+						boneMat.fromArray(boneMatrices, boneIndex * 16);
+						contrib.copy(vertex).applyMatrix4(boneMat).multiplyScalar(weight);
+						skinned.add(contrib);
+					}
+					skinned.applyMatrix4(skinnedMesh.bindMatrixInverse).applyMatrix4(mesh.matrixWorld);
+					min = Math.min(min, skinned.y);
+					max = Math.max(max, skinned.y);
+				}
+			}
+			else if ((mesh as any).isMesh === true)
+			{
+				const geometry = mesh.geometry as THREE.BufferGeometry;
+				if (geometry.boundingBox === null) geometry.computeBoundingBox();
+				if (geometry.boundingBox === null) return;
+				vertex.copy(geometry.boundingBox.min).applyMatrix4(mesh.matrixWorld);
+				min = Math.min(min, vertex.y);
+				vertex.copy(geometry.boundingBox.max).applyMatrix4(mesh.matrixWorld);
+				max = Math.max(max, vertex.y);
+			}
+		});
+
+		return { min, max };
+	}
+
+	private measureSkinnedHeight(root: THREE.Object3D): number
+	{
+		const bounds = this.measureSkinnedBounds(root);
+		return bounds.max - bounds.min;
 	}
 
 	public setAnimations(animations: []): void
@@ -594,6 +724,7 @@ export class Character extends THREE.Object3D implements IWorldEntity
 			this.mixer.stopAllAction();
 			action.fadeIn(fadeIn);
 			action.play();
+			this.currentClipName = clipName;
 
 			return action.getClip().duration;
 		}

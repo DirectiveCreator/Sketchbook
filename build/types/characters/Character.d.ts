@@ -24,7 +24,10 @@ export declare class Character extends THREE.Object3D implements IWorldEntity {
     mixer: THREE.AnimationMixer;
     animations: any[];
     mmlUrl: string;
+    private currentClipName;
     private mmlLoader;
+    private boxmanRestScene;
+    private boxmanClips;
     acceleration: THREE.Vector3;
     velocity: THREE.Vector3;
     arcadeVelocityInfluence: THREE.Vector3;
@@ -65,8 +68,22 @@ export declare class Character extends THREE.Object3D implements IWorldEntity {
      * Load an MML avatar and replace the default model with it.
      * Movement, physics and state logic are untouched - only the visual
      * model, materials, mixer and animation clips are swapped.
+     *
+     * The avatar is scaled to the default character's height and grounded
+     * at the same foot level. The boxman animation clips are retargeted
+     * onto the avatar's skeleton so the state machine (idle, run, jump,
+     * sitting, driving, ...) fully animates the rig even when the MML
+     * model ships no clips of its own.
      */
     private loadMMLAvatar;
+    /**
+     * Min/max Y of a model in its current pose, computing skinned vertex
+     * positions on the CPU. Regular bounding boxes ignore skinning and
+     * report the wrong size for skinned meshes (e.g. double-counting an
+     * armature scale), so this is the reliable way to measure a rig.
+     */
+    private measureSkinnedBounds;
+    private measureSkinnedHeight;
     setAnimations(animations: []): void;
     setArcadeVelocityInfluence(x: number, y?: number, z?: number): void;
     setViewVector(vector: THREE.Vector3): void;
