@@ -214,10 +214,14 @@ export class AnimationRetargeter
 		// boxy body, so a proportioned humanoid ends up seated too high even
 		// with a faithful retarget. For these clips the pelvis gets an extra
 		// vertical offset so the avatar's hip joints land exactly where the
-		// boxman's hip joints are when seated.
+		// boxman's hip joints are when seated. The same applies forward/back:
+		// the boxman's torso is centered on its hips while a humanoid torso
+		// leans forward of the pelvis, so the pelvis also gets a Z offset
+		// that puts the avatar's seated head where the boxman's head is.
 		const seatedClip = /sitting|driving|sit_down/;
 		const thighPairs = srcPairs.filter((pair) =>
 			pair.slot.key === 'upperLegL' || pair.slot.key === 'upperLegR');
+		const headPair = srcPairs.find((pair) => pair.slot.key === 'head');
 
 		for (const clip of clips)
 		{
@@ -247,13 +251,15 @@ export class AnimationRetargeter
 			const parentScale = new THREE.Vector3();
 			const prevQuats = new Map<THREE.Object3D, THREE.Quaternion>();
 
-			// For seated clips, capture source and target hip-joint heights at
-			// the mid frame so the pelvis can be dropped onto the seat (see
-			// seatedClip note above).
+			// For seated clips, capture source and target hip-joint heights and
+			// head forward positions at the mid frame so the pelvis can be
+			// dropped onto the seat and shifted back (see seatedClip note above).
 			const isSeated = seatedClip.test(clip.name) && thighPairs.length > 0;
 			const midSample = Math.floor(sampleCount / 2);
 			let srcSeatedThighY = 0;
 			let tgtSeatedThighY = 0;
+			let srcSeatedHeadZ = 0;
+			let tgtSeatedHeadZ = 0;
 
 			for (let s = 0; s < sampleCount; s++)
 			{
@@ -331,6 +337,17 @@ export class AnimationRetargeter
 								.setFromMatrixPosition(tgtMat).y / thighPairs.length;
 						}
 					}
+					if (headPair !== undefined)
+					{
+						srcSeatedHeadZ = new THREE.Vector3()
+							.setFromMatrixPosition(headPair.sourceBone.matrixWorld).z;
+						const tgtHeadMat = worldMats.get(headPair.targetBone);
+						if (tgtHeadMat !== undefined)
+						{
+							tgtSeatedHeadZ = new THREE.Vector3()
+								.setFromMatrixPosition(tgtHeadMat).z;
+						}
+					}
 				}
 			}
 
@@ -341,21 +358,25 @@ export class AnimationRetargeter
 			if (isSeated && hipsPair !== undefined && hipPosValues.length > 0)
 			{
 				// Drop the pelvis so the avatar's seated hip joints match the
-				// boxman's. The offset is computed in target world space and
-				// converted to pelvis-local space via the pelvis parent's
-				// (static, non-animated) rest world matrix.
+				// boxman's, and shift it back so the avatar's seated head lands
+				// where the boxman's head is (a humanoid torso leans forward of
+				// the pelvis while the boxman's is centered on its hips). The
+				// offsets are computed in target world space and converted to
+				// pelvis-local space via the pelvis parent's (static,
+				// non-animated) rest world matrix.
 				const seatOffset = srcSeatedThighY - tgtSeatedThighY;
+				const backOffset = THREE.MathUtils.clamp(srcSeatedHeadZ - tgtSeatedHeadZ, -0.5, 0.5);
 				const parentRot = new THREE.Matrix4().extractRotation(
 					(hipsPair.targetBone.parent as THREE.Object3D).matrixWorld);
 				const parentInv = new THREE.Matrix4().getInverse(parentRot);
-				const localOffset = new THREE.Vector3(0, seatOffset, 0).applyMatrix4(parentInv);
+				const localOffset = new THREE.Vector3(0, seatOffset, backOffset).applyMatrix4(parentInv);
 				for (let i = 0; i < hipPosValues.length; i += 3)
 				{
 					hipPosValues[i] += localOffset.x;
 					hipPosValues[i + 1] += localOffset.y;
 					hipPosValues[i + 2] += localOffset.z;
 				}
-				console.log(`AnimationRetargeter: seated clip '${clip.name}' pelvis offset ${seatOffset.toFixed(3)}`);
+				console.log(`AnimationRetargeter: seated clip '${clip.name}' pelvis offset ${seatOffset.toFixed(3)}, back offset ${backOffset.toFixed(3)}`);
 			}
 
 			const tracks: THREE.KeyframeTrack[] = [];

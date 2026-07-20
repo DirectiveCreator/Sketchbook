@@ -524,6 +524,27 @@ export class World
 			</div>
 		`).appendTo('body');
 
+		// Hide-UI toggle: button + H hotkey. The button stays visible so the
+		// UI can always be restored; the hotkey also works in pointer lock.
+		$(`	<button id="ui-toggle" style="position: fixed; bottom: 10px; right: 10px; z-index: 2000;
+				padding: 6px 12px; font-family: 'Cutive Mono', monospace; font-size: 12px;
+				color: #fff; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.35);
+				border-radius: 4px; cursor: pointer;">Hide UI (H)</button>
+		`).appendTo('body');
+		document.getElementById('ui-toggle').addEventListener('click', () =>
+		{
+			UIManager.toggleAllUI();
+		});
+		window.addEventListener('keydown', (event) =>
+		{
+			const target = event.target as HTMLElement;
+			if (target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+			if (event.code === 'KeyH' && !event.repeat)
+			{
+				UIManager.toggleAllUI();
+			}
+		});
+
 		// Canvas
 		document.body.appendChild(this.renderer.domElement);
 		this.renderer.domElement.id = 'canvas';

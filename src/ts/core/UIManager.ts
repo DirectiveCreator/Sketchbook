@@ -1,8 +1,11 @@
 export class UIManager
 {
+	private static uiHidden: boolean = false;
+
 	public static setUserInterfaceVisible(value: boolean): void
 	{
-		document.getElementById('ui-container').style.display = value ? 'block' : 'none';
+		const container = document.getElementById('ui-container');
+		if (container !== null) container.style.display = value ? 'block' : 'none';
 	}
 
 	public static setLoadingScreenVisible(value: boolean): void
@@ -14,5 +17,36 @@ export class UIManager
 	{
 		document.getElementById('statsBox').style.display = value ? 'block' : 'none';
 		document.getElementById('dat-gui-container').style.top = value ? '48px' : '0px';
+	}
+
+	/**
+	 * Hide/show every overlay UI element (controls panel, settings GUI,
+	 * FPS stats, console messages) for a clean view. The toggle button
+	 * itself stays visible so the UI can always be brought back.
+	 */
+	public static toggleAllUI(): void
+	{
+		this.setAllUIVisible(this.uiHidden);
+	}
+
+	public static setAllUIVisible(value: boolean): void
+	{
+		this.uiHidden = !value;
+
+		const ids = ['ui-container', 'dat-gui-container', 'statsBox', 'console'];
+		for (const id of ids)
+		{
+			const el = document.getElementById(id);
+			if (el === null) continue;
+			// Never un-hide the FPS stats box unless it was explicitly enabled
+			if (id === 'statsBox' && value) continue;
+			el.style.visibility = value ? 'visible' : 'hidden';
+		}
+
+		const button = document.getElementById('ui-toggle');
+		if (button !== null)
+		{
+			button.textContent = value ? 'Hide UI (H)' : 'Show UI (H)';
+		}
 	}
 }

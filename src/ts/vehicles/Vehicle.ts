@@ -32,6 +32,13 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 	public spawnPoint: THREE.Object3D;
 	private modelContainer: THREE.Group;
 
+	// Soft-body crash deformation: per-axis squash amount driven by collision
+	// impulses and sprung back to zero (underdamped, so vehicles wobble
+	// like jelly after a crash). Applied to the visual model only.
+	private deformVec: THREE.Vector3 = new THREE.Vector3();
+	private deformVel: THREE.Vector3 = new THREE.Vector3();
+	private deformAccel: THREE.Vector3 = new THREE.Vector3();
+
 	private firstPerson: boolean = false;
 
 	constructor(gltf: any, handlingSetup?: any)
@@ -75,6 +82,54 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 		});
 
 		this.help = new THREE.AxesHelper(2);
+
+		// Soft-body crash deformation: hard impacts kick the deform spring.
+		this.collision.addEventListener('collide', (event: any) =>
+		{
+			const impact = Math.abs(event.contact.getImpactVelocityAlongNormal());
+			if (impact < 2.5) return;
+
+			// Impact normal in vehicle-local space (sign doesn't matter, the
+			// squash is symmetric per axis)
+			const ni = event.contact.ni;
+			const localN = new THREE.Vector3(ni.x, ni.y, ni.z)
+				.applyQuaternion(this.quaternion.clone().inverse());
+
+			const strength = Math.min(0.08 * impact, 0.45);
+			const kick = strength * 10;
+			this.deformVel.x += Math.abs(localN.x) * kick;
+			this.deformVel.y += Math.abs(localN.y) * kick;
+			this.deformVel.z += Math.abs(localN.z) * kick;
+		});
+	}
+
+	/**
+	 * Integrates the crash-deformation spring and applies the resulting
+	 * squash (with a slight perpendicular bulge) to the vehicle model.
+	 */
+	private updateDeformation(timeStep: number): void
+	{
+		if (this.deformVec.lengthSq() < 1e-6 && this.deformVel.lengthSq() < 1e-6) return;
+
+		// Underdamped spring: bouncy wobble back to rest
+		const stiffness = 90;
+		const damping = 5;
+		this.deformAccel.copy(this.deformVec).multiplyScalar(-stiffness)
+			.addScaledVector(this.deformVel, -damping);
+		this.deformVel.addScaledVector(this.deformAccel, timeStep);
+		this.deformVec.addScaledVector(this.deformVel, timeStep);
+
+		const d = this.deformVec;
+		d.x = THREE.MathUtils.clamp(d.x, -0.2, 0.5);
+		d.y = THREE.MathUtils.clamp(d.y, -0.2, 0.5);
+		d.z = THREE.MathUtils.clamp(d.z, -0.2, 0.5);
+
+		const bulge = 0.3;
+		this.modelContainer.scale.set(
+			THREE.MathUtils.clamp(1 - d.x + bulge * (d.y + d.z), 0.55, 1.4),
+			THREE.MathUtils.clamp(1 - d.y + bulge * (d.x + d.z), 0.55, 1.4),
+			THREE.MathUtils.clamp(1 - d.z + bulge * (d.x + d.y), 0.55, 1.4)
+		);
 	}
 
 	public noDirectionPressed(): boolean
@@ -100,6 +155,8 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 		this.seats.forEach((seat: VehicleSeat) => {
 			seat.update(timeStep);
 		});
+
+		this.updateDeformation(timeStep);
 
 		for (let i = 0; i < this.rayCastVehicle.wheelInfos.length; i++)
 		{
