@@ -22,7 +22,8 @@ export class UIManager
 	/**
 	 * Hide/show every overlay UI element (controls panel, settings GUI,
 	 * FPS stats, console messages) for a clean view. The toggle button
-	 * itself stays visible so the UI can always be brought back.
+	 * hides itself as well so footage is completely clean; the H hotkey
+	 * always brings the UI back.
 	 */
 	public static toggleAllUI(): void
 	{
@@ -33,7 +34,7 @@ export class UIManager
 	{
 		this.uiHidden = !value;
 
-		const ids = ['ui-container', 'dat-gui-container', 'statsBox', 'console'];
+		const ids = ['ui-container', 'dat-gui-container', 'statsBox', 'console', 'ui-toggle'];
 		for (const id of ids)
 		{
 			const el = document.getElementById(id);
@@ -41,12 +42,6 @@ export class UIManager
 			// Never un-hide the FPS stats box unless it was explicitly enabled
 			if (id === 'statsBox' && value) continue;
 			el.style.visibility = value ? 'visible' : 'hidden';
-		}
-
-		const button = document.getElementById('ui-toggle');
-		if (button !== null)
-		{
-			button.textContent = value ? 'Hide UI (H)' : 'Show UI (H)';
 		}
 	}
 }

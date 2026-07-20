@@ -44,7 +44,8 @@ export class VehicleSpawnPoint implements ISpawnPoint
 			{
 				loadingManager.loadGLTF('build/assets/boxman.glb', (charModel) =>
 				{
-					let character = new Character(charModel);
+					// AI / pre-seated drivers get the same MML avatar as the player
+					let character = new Character(charModel, world.defaultMMLUrl || undefined);
 					world.add(character);
 					character.teleportToVehicle(vehicle, vehicle.seats[0]);
 

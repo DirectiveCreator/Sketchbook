@@ -524,8 +524,9 @@ export class World
 			</div>
 		`).appendTo('body');
 
-		// Hide-UI toggle: button + H hotkey. The button stays visible so the
-		// UI can always be restored; the hotkey also works in pointer lock.
+		// Hide-UI toggle: button + H hotkey. The button hides itself too, so
+		// footage is completely clean; the H hotkey (works in pointer lock)
+		// always brings the UI back.
 		$(`	<button id="ui-toggle" style="position: fixed; bottom: 10px; right: 10px; z-index: 2000;
 				padding: 6px 12px; font-family: 'Cutive Mono', monospace; font-size: 12px;
 				color: #fff; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.35);
@@ -563,6 +564,8 @@ export class World
 			FXAA: true,
 			Debug_Physics: false,
 			Debug_FPS: false,
+			Crash_Squash: true,
+			Crash_Damage: false,
 			Sun_Elevation: 50,
 			Sun_Rotation: 145,
 			Default_MML_URL: queryMMLUrl
@@ -643,6 +646,18 @@ export class World
 			.onChange((enabled) =>
 			{
 				UIManager.setFPSVisible(enabled);
+			});
+		settingsFolder.add(this.params, 'Crash_Squash')
+			.name('Crash Squash (jelly)')
+			.onChange((enabled) =>
+			{
+				Vehicle.crashSquashEnabled = enabled;
+			});
+		settingsFolder.add(this.params, 'Crash_Damage')
+			.name('Crash Damage (dents)')
+			.onChange((enabled) =>
+			{
+				Vehicle.crashDamageEnabled = enabled;
 			});
 
 		// MML avatar URL - applies to characters spawned after the change

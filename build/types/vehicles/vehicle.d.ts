@@ -28,11 +28,16 @@ export declare abstract class Vehicle extends THREE.Object3D implements IWorldEn
     private deformVec;
     private deformVel;
     private deformAccel;
+    static crashSquashEnabled: boolean;
+    static crashDamageEnabled: boolean;
+    private damageVec;
+    private damageTilt;
     private firstPerson;
     constructor(gltf: any, handlingSetup?: any);
     /**
      * Integrates the crash-deformation spring and applies the resulting
-     * squash (with a slight perpendicular bulge) to the vehicle model.
+     * squash (with a slight perpendicular bulge) to the vehicle model,
+     * combined with any permanent accumulated crash damage.
      */
     private updateDeformation;
     noDirectionPressed(): boolean;

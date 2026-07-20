@@ -39,6 +39,17 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 	private deformVel: THREE.Vector3 = new THREE.Vector3();
 	private deformAccel: THREE.Vector3 = new THREE.Vector3();
 
+	// Crash behavior toggles (wired to the settings GUI in World.ts).
+	// Squash: the temporary jelly wobble. Damage: permanent dents that
+	// accumulate with every hard impact and never spring back.
+	public static crashSquashEnabled: boolean = true;
+	public static crashDamageEnabled: boolean = false;
+
+	// Permanent crash damage: accumulated per-axis dent (0..0.55) plus a
+	// small random body tilt per impact, so a wrecked vehicle stays wrecked.
+	private damageVec: THREE.Vector3 = new THREE.Vector3();
+	private damageTilt: THREE.Euler = new THREE.Euler();
+
 	private firstPerson: boolean = false;
 
 	constructor(gltf: any, handlingSetup?: any)
@@ -83,7 +94,8 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 
 		this.help = new THREE.AxesHelper(2);
 
-		// Soft-body crash deformation: hard impacts kick the deform spring.
+		// Crash deformation: hard impacts kick the deform spring and/or add
+		// permanent damage, depending on the enabled toggles.
 		this.collision.addEventListener('collide', (event: any) =>
 		{
 			const impact = Math.abs(event.contact.getImpactVelocityAlongNormal());
@@ -96,40 +108,68 @@ export abstract class Vehicle extends THREE.Object3D implements IWorldEntity
 				.applyQuaternion(this.quaternion.clone().inverse());
 
 			const strength = Math.min(0.08 * impact, 0.45);
-			const kick = strength * 10;
-			this.deformVel.x += Math.abs(localN.x) * kick;
-			this.deformVel.y += Math.abs(localN.y) * kick;
-			this.deformVel.z += Math.abs(localN.z) * kick;
+
+			if (Vehicle.crashSquashEnabled)
+			{
+				const kick = strength * 10;
+				this.deformVel.x += Math.abs(localN.x) * kick;
+				this.deformVel.y += Math.abs(localN.y) * kick;
+				this.deformVel.z += Math.abs(localN.z) * kick;
+			}
+
+			if (Vehicle.crashDamageEnabled)
+			{
+				// Permanent dent along the impact axis (capped so the model
+				// never fully flattens), plus a small random body tilt.
+				this.damageVec.x = Math.min(this.damageVec.x + Math.abs(localN.x) * strength * 0.6, 0.55);
+				this.damageVec.y = Math.min(this.damageVec.y + Math.abs(localN.y) * strength * 0.6, 0.55);
+				this.damageVec.z = Math.min(this.damageVec.z + Math.abs(localN.z) * strength * 0.6, 0.55);
+				this.damageTilt.x += (Math.random() - 0.5) * strength * 0.15;
+				this.damageTilt.z += (Math.random() - 0.5) * strength * 0.15;
+				this.damageTilt.x = THREE.MathUtils.clamp(this.damageTilt.x, -0.09, 0.09);
+				this.damageTilt.z = THREE.MathUtils.clamp(this.damageTilt.z, -0.09, 0.09);
+			}
 		});
 	}
 
 	/**
 	 * Integrates the crash-deformation spring and applies the resulting
-	 * squash (with a slight perpendicular bulge) to the vehicle model.
+	 * squash (with a slight perpendicular bulge) to the vehicle model,
+	 * combined with any permanent accumulated crash damage.
 	 */
 	private updateDeformation(timeStep: number): void
 	{
-		if (this.deformVec.lengthSq() < 1e-6 && this.deformVel.lengthSq() < 1e-6) return;
+		const hasDamage = this.damageVec.lengthSq() > 1e-6 || this.damageTilt.x !== 0 || this.damageTilt.z !== 0;
+		const springActive = this.deformVec.lengthSq() >= 1e-6 || this.deformVel.lengthSq() >= 1e-6;
+		if (!hasDamage && !springActive) return;
 
-		// Underdamped spring: bouncy wobble back to rest
-		const stiffness = 90;
-		const damping = 5;
-		this.deformAccel.copy(this.deformVec).multiplyScalar(-stiffness)
-			.addScaledVector(this.deformVel, -damping);
-		this.deformVel.addScaledVector(this.deformAccel, timeStep);
-		this.deformVec.addScaledVector(this.deformVel, timeStep);
+		if (springActive)
+		{
+			// Underdamped spring: bouncy wobble back to rest
+			const stiffness = 90;
+			const damping = 5;
+			this.deformAccel.copy(this.deformVec).multiplyScalar(-stiffness)
+				.addScaledVector(this.deformVel, -damping);
+			this.deformVel.addScaledVector(this.deformAccel, timeStep);
+			this.deformVec.addScaledVector(this.deformVel, timeStep);
+		}
 
+		// Temporary spring squash + permanent dents on the same axes
 		const d = this.deformVec;
 		d.x = THREE.MathUtils.clamp(d.x, -0.2, 0.5);
 		d.y = THREE.MathUtils.clamp(d.y, -0.2, 0.5);
 		d.z = THREE.MathUtils.clamp(d.z, -0.2, 0.5);
+		const sx = d.x + this.damageVec.x;
+		const sy = d.y + this.damageVec.y;
+		const sz = d.z + this.damageVec.z;
 
 		const bulge = 0.3;
 		this.modelContainer.scale.set(
-			THREE.MathUtils.clamp(1 - d.x + bulge * (d.y + d.z), 0.55, 1.4),
-			THREE.MathUtils.clamp(1 - d.y + bulge * (d.x + d.z), 0.55, 1.4),
-			THREE.MathUtils.clamp(1 - d.z + bulge * (d.x + d.y), 0.55, 1.4)
+			THREE.MathUtils.clamp(1 - sx + bulge * (sy + sz), 0.45, 1.4),
+			THREE.MathUtils.clamp(1 - sy + bulge * (sx + sz), 0.45, 1.4),
+			THREE.MathUtils.clamp(1 - sz + bulge * (sx + sy), 0.45, 1.4)
 		);
+		this.modelContainer.rotation.set(this.damageTilt.x, 0, this.damageTilt.z);
 	}
 
 	public noDirectionPressed(): boolean
